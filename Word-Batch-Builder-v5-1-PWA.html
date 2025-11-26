@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Word-Batch-Builder v5.1-PWA — © 2025 Glen Carruthers</title>
+
+<!-- PWA REQUIRED TAGS -->
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#007bff">
+<link rel="icon" sizes="192x192" href="icon-192.png">
+<link rel="icon" sizes="512x512" href="icon-512.png">
+
+<style>
+/* (ALL CSS FROM v5.0 GOES HERE – UNCHANGED) */
+
+body { margin:0; font-family:Arial, sans-serif; background:#f5f5f5; }
+body.dark { background:#222; color:#eee; }
+
+#topHeader {
+  background:#f4f4f4; color:#222;
+  padding:10px; text-align:center; font-weight:bold;
+  position:sticky; top:0; z-index:2000;
+}
+body.dark #topHeader { background:#333; color:#eee; }
+
+#topBar, #cmdBar, #bottomBar {
+  background:#f0f0f0;
+  padding:10px;
+}
+#topBar, #cmdBar { position:sticky; z-index:1500; }
+#topBar {
+  top:48px;
+  display:flex;
+  justify-content:space-between;
+}
+#cmdBar { top:96px; }
+
+body.dark #topBar,
+body.dark #cmdBar,
+body.dark #bottomBar { background:#333; }
+
+#scrollWindow {
+  position:absolute;
+  top:150px;
+  bottom:80px;
+  left:0; right:0;
+  overflow-y:auto;
+  background:#fff;
+}
+body.dark #scrollWindow { background:#444; }
+
+table { border-collapse:collapse; width:100%; }
+th, td {
+  border:1px solid #ccc;
+  padding:6px;
+  white-space:nowrap;
+}
+th { background:#ddd; }
+
+.hiddenCol { display:none !important; }
+
+#bottomBar {
+  position:fixed;
+  bottom:0; left:0; right:0;
+  border-top:1px solid #bbb;
+  z-index:3000;
+}
+
+/* Column modal */
+#colOverlay {
+  display:none;
+  position:fixed;
+  top:0; left:0; right:0; bottom:0;
+  background:rgba(0,0,0,0.4);
+  z-index:4000;
+}
+#colModal {
+  position:absolute;
+  top:50%; left:50%;
+  transform:translate(-50%,-50%);
+  background:#fff;
+  padding:20px;
+  width:300px;
+  max-height:60%;
+  overflow-y:auto;
+  border-radius:10px;
+}
+body.dark #colModal { background:#222; color:#eee; }
+
+/* Batch output panel */
+#batchPanel {
+  position:fixed;
+  bottom:80px;
+  left:0; right:0;
+  max-height:40%;
+  overflow:auto;
+  background:#fff;
+  padding:10px;
+  z-index:2500;
+  display:none;
+}
+
+/* Toast */
+#toast {
+  position:fixed;
+  bottom:100px;
+  left:50%;
+  transform:translateX(-50%);
+  background:#333;
+  color:#fff;
+  padding:10px 16px;
+  border-radius:6px;
+  opacity:0;
+  transition:opacity .3s;
+  z-index:3500;
+}
+#toast.show { opacity:1; }
+
+/* Spinner overlay */
+#spinnerOverlay {
+  display:none;
+  position:fixed;
+  top:0; left:0; right:0; bottom:0;
+  background:rgba(0,0,0,0.25);
+  z-index:5000;
+}
+#spinner {
+  width:60px; height:60px;
+  border:7px solid #ccc;
+  border-top:7px solid #007bff;
+  border-radius:50%;
+  animation:spin 1s linear infinite;
+  position:absolute;
+  top:50%; left:50%;
+  transform:translate(-50%,-50%);
+}
+@keyframes spin {
+  0%   { transform:translate(-50%,-50%) rotate(0deg); }
+  100% { transform:translate(-50%,-50%) rotate(360deg); }
+}
+</style>
+</head>
+
+<body>
+<div id="spinnerOverlay"><div id="spinner"></div></div>
+
+<div id="topHeader">Word-Batch-Builder v5.1-PWA — © 2025 Glen Carruthers</div>
+
+<div id="topBar">
+  <div>
+    <button onclick="document.getElementById('file').click()">Load Excel</button>
+    <input type="file" id="file" accept=".xlsx,.xls" style="display:none">
+  </div>
+  <div>
+    <button id="langEN" onclick="setLang('EN')">EN</button>
+    <button id="langFR" onclick="setLang('FR')">FR</button>
+    <button id="darkBtn" onclick="toggleDark()">Dark</button>
+  </div>
+</div>
+
+<div id="cmdBar">
+  <button id="btnSelectAll" onclick="selectAll()">Select All</button>
+  <button id="btnClear" onclick="clearAll()">Clear</button>
+  <button id="btnCols" onclick="openCols()">Select Columns</button>
+  <button id="btnGen" onclick="generateBatch()" disabled>Generate</button>
+</div>
+
+<div id="scrollWindow">
+  <table id="memberTable">
+    <thead><tr id="hdr"><th>Select</th></tr></thead>
+    <tbody id="rows"></tbody>
+  </table>
+</div>
+
+<div id="bottomBar">
+  <button id="copyBtn" onclick="copyBatch()" disabled>Copy</button>
+  <button id="saveBtn" onclick="saveBatch()" disabled>Save</button>
+  <button id="clearBtn" onclick="clearBatch()" disabled>Clear</button>
+  <span style="float:right;">Word-Batch-Builder v5.1-PWA — © 2025 Glen Carruthers</span>
+</div>
+
+<!-- Column selector -->
+<div id="colOverlay">
+  <div id="colModal">
+    <h3 id="colTitle">Select Columns</h3>
+    <div id="colList"></div>
+    <div style="text-align:right; margin-top:10px;">
+      <button onclick="applyCols()">Apply</button>
+      <button onclick="restoreCols()">Restore</button>
+      <button onclick="closeCols()">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- Batch output preview -->
+<div id="batchPanel">
+  <h3 id="batchTitle">Batch Output</h3>
+  <pre id="out"></pre>
+</div>
+
+<div id="toast"></div>
+
+<!-- XLSX library from CDN -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+<script>
+/* ——— ALL SCRIPT LOGIC FROM v5.0 
+      IS INCLUDED HERE EXACTLY AS-IS ——— */
+
+/* Dark mode */
+function toggleDark(){ document.body.classList.toggle("dark"); }
+
+/* Spinner */
+function showSpinner(){ spinnerOverlay.style.display="block"; }
+function hideSpinner(){ spinnerOverlay.style.display="none"; }
+
+/* Language labels */
+let data=[], cols=[], lang="EN";
+
+const labels={
+ EN:{ selectAll:"Select All", clear:"Clear", selectColumns:"Select Columns",
+      generate:"Generate", batchOut:"Batch Output", selectColsTitle:"Select Columns" },
+ FR:{ selectAll:"Tout sélectionner", clear:"Effacer", selectColumns:"Choisir les colonnes",
+      generate:"Générer", batchOut:"Sortie de lot", selectColsTitle:"Choisir les colonnes" }
+};
+
+function refreshLabels(){
+ btnSelectAll.innerText = labels[lang].selectAll;
+ btnClear.innerText      = labels[lang].clear;
+ btnCols.innerText       = labels[lang].selectColumns;
+ btnGen.innerText        = labels[lang].generate;
+ batchTitle.innerText    = labels[lang].batchOut;
+ colTitle.innerText      = labels[lang].selectColsTitle;
+}
+function setLang(l){ lang=l; refreshLabels(); }
+
+/* Load Excel */
+file.onchange = ()=>{
+ showSpinner();
+ const f = file.files[0];
+ const reader = new FileReader();
+ reader.onload = e=>{
+   const wb = XLSX.read(new Uint8Array(e.target.result),{type:"array"});
+   const sh = wb.Sheets[wb.SheetNames[0]];
+   const rows = XLSX.utils.sheet_to_json(sh,{defval:""});
+   data = rows.map((r,i)=>{ r.__i=i; return r; });
+   buildInitialColumns();
+   buildTable();
+   hideSpinner();
+ };
+ reader.readAsArrayBuffer(f);
+};
+
+function buildInitialColumns(){
+ if(cols.length===0 && data.length>0){
+   cols = Object.keys(data[0]).filter(k=>!k.startsWith("__"));
+ }
+}
+
+function buildTable(){
+ hdr.innerHTML="<th>Select</th>";
+ cols.forEach(c=> hdr.innerHTML+=`<th>${c}</th>`);
+
+ rows.innerHTML="";
+ data.forEach(r=>{
+   let tr=document.createElement("tr");
+   let h=`<td><input type='checkbox' class='chk' data-i='${r.__i}'></td>`;
+   cols.forEach(c=> h+=`<td>${r[c]}</td>`);
+   tr.innerHTML=h;
+   rows.appendChild(tr);
+ });
+
+ document.querySelectorAll(".chk").forEach(c=>{
+   c.onchange=()=>updateGenState();
+ });
+ updateGenState();
+}
+
+function updateGenState(){
+ btnGen.disabled = document.querySelectorAll(".chk:checked").length===0;
+}
+
+function selectAll(){ document.querySelectorAll(".chk").forEach(c=> c.checked=true); updateGenState(); }
+function clearAll(){ document.querySelectorAll(".chk").forEach(c=> c.checked=false); updateGenState(); }
+
+function openCols(){ colOverlay.style.display="block"; buildColList(); }
+function closeCols(){ colOverlay.style.display="none"; }
+
+function buildColList(){
+ colList.innerHTML="";
+ cols.forEach(c=>{
+   colList.innerHTML+=`<div><input type='checkbox' class='cbc' value='${c}' checked> ${c}</div>`;
+ });
+}
+
+function applyCols(){
+ showSpinner();
+ setTimeout(()=>{
+   const selected=[...document.querySelectorAll(".cbc")]
+     .filter(c=>c.checked)
+     .map(c=>c.value);
+   if(selected.length>0) cols=selected;
+   buildTable();
+   hideSpinner();
+   closeCols();
+ },300);
+}
+
+function restoreCols(){
+ showSpinner();
+ setTimeout(()=>{
+   cols=[];
+   buildInitialColumns();
+   buildTable();
+   hideSpinner();
+   closeCols();
+ },300);
+}
+
+function generateBatch(){
+ let checked=[...document.querySelectorAll(".chk:checked")].map(c=>+c.dataset.i);
+ let outText = cols.join("\t")+"\n";
+ checked.forEach(i=>{
+   let r=data.find(x=>x.__i==i);
+   outText+=cols.map(c=>r[c]).join("\t")+"\n";
+ });
+ out.textContent = outText;
+ batchPanel.style.display="block";
+ copyBtn.disabled=false;
+ saveBtn.disabled=false;
+ clearBtn.disabled=false;
+}
+
+function copyBatch(){
+ navigator.clipboard.writeText(out.textContent);
+ showToast(lang==="FR"?"Copié":"Copied");
+}
+function saveBatch(){
+ const blob=new Blob([out.textContent],{type:"text/plain"});
+ const a=document.createElement("a");
+ a.href=URL.createObjectURL(blob);
+ a.download="batch-list.txt";
+ a.click();
+}
+function clearBatch(){
+ out.textContent="";
+ batchPanel.style.display="none";
+ copyBtn.disabled=true;
+ saveBtn.disabled=true;
+ clearBtn.disabled=true;
+}
+
+function showToast(msg){
+ toast.textContent=msg;
+ toast.classList.add("show");
+ setTimeout(()=> toast.classList.remove("show"),1500);
+}
+
+/* Initialize labels */
+refreshLabels();
+
+/* REGISTER SERVICE WORKER — REQUIRED FOR PWA */
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("service-worker.js");
+}
+</script>
+
+</body>
+</html>
